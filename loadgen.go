@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -92,13 +93,14 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	go HandleResponse(nb, wg)
-	for i, d := range data {
+	for i, _ := range data {
 		if i >= limit {
 			break
 		}
 		wg.Add(1)
 		go Request(nb)
-		time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
+		// time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
+		time.Sleep(time.Duration(40) * time.Millisecond)
 		i++
 	}
 	wg.Wait()
@@ -108,7 +110,13 @@ func Request(nb chan nonBlocking) {
 
 	client := &http.Client{}
 	start := time.Now()
-	req, err := http.NewRequest("GET", "http://192.168.170.24:8081/function/synth", nil)
+
+	url := "http://192.168.10.11:3233/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
+	var jsonB = []byte("{\"input\":\"hello\"}")
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonB))
+	req.Header.Add("Authorization", "Basic MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU42djJCS0sxZFhZRnBYbFBrY2NPRnFtMTJDZEFzTWdSVTRWck5aOWx5R1ZDR3VNREdJd1A=")
+	req.Header.Add("Content-Type", "application/json")
+
 	if err != nil {
 		// handle error
 		fmt.Println("Error")
