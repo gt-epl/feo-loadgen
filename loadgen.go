@@ -2,6 +2,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -71,7 +72,11 @@ type nonBlocking struct {
 }
 
 func main() {
-	limit := 10
+	lflag := flag.Int("limit", 42, "an int")
+	flag.Parse()
+	limit := *lflag
+
+	//limit := 10
 	f, err := os.Open("./traffic_dur1000_lam1.0_stime10.0_rate1.0_site1.npy")
 	if err != nil {
 		log.Printf("error reading file")
@@ -87,13 +92,13 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	go HandleResponse(nb, wg)
-	for i, _ := range data {
+	for i, d := range data {
 		if i >= limit {
 			break
 		}
 		wg.Add(1)
 		go Request(nb)
-    //time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
+		time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
 		i++
 	}
 	wg.Wait()
@@ -103,7 +108,7 @@ func Request(nb chan nonBlocking) {
 
 	client := &http.Client{}
 	start := time.Now()
-	req, err := http.NewRequest("GET", "http://192.168.122.171:8081/function/inf", nil)
+	req, err := http.NewRequest("GET", "http://192.168.170.24:8081/function/synth", nil)
 	if err != nil {
 		// handle error
 		fmt.Println("Error")
