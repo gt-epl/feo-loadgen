@@ -74,11 +74,12 @@ type nonBlocking struct {
 
 func main() {
 	lflag := flag.Int("limit", 42, "an int")
+	tracefile := flag.String("trace", "./traffic_dur1000_lam1.0_stime10.0_rate1.0_site1.npy", "Trace file for load generation")
 	flag.Parse()
 	limit := *lflag
 
 	//limit := 10
-	f, err := os.Open("./traffic_dur1000_lam1.0_stime10.0_rate1.0_site1.npy")
+	f, err := os.Open(*tracefile)
 	if err != nil {
 		log.Printf("error reading file")
 	}
@@ -93,14 +94,14 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	go HandleResponse(nb, wg)
-	for i, _ := range data {
+	for i, d := range data {
 		if i >= limit {
 			break
 		}
 		wg.Add(1)
 		go Request(nb)
-		// time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
-		time.Sleep(time.Duration(40) * time.Millisecond)
+		time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
+		// time.Sleep(time.Duration(40) * time.Millisecond)
 		i++
 	}
 	wg.Wait()
@@ -111,7 +112,7 @@ func Request(nb chan nonBlocking) {
 	client := &http.Client{}
 	start := time.Now()
 
-	url := "http://192.168.10.11:3233/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
+	url := "http://192.168.10.11:9696/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
 	var jsonB = []byte("{\"input\":\"hello\"}")
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonB))
 	req.Header.Add("Authorization", "Basic MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU42djJCS0sxZFhZRnBYbFBrY2NPRnFtMTJDZEFzTWdSVTRWck5aOWx5R1ZDR3VNREdJd1A=")
