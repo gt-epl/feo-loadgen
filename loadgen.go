@@ -14,6 +14,9 @@ import (
 	"github.com/sbinet/npyio/npy"
 )
 
+// TODO: change to user config
+const IP = "192.168.10.10:9696"
+
 /*COMPLICATED load generation*/
 // type httpResp struct {
 //     Response *http.Response
@@ -111,8 +114,8 @@ func Request(nb chan nonBlocking) {
 
 	client := &http.Client{}
 	start := time.Now()
-
-	url := "http://192.168.10.11:9696/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
+	template := "http://%s/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
+	url := fmt.Sprintf(template, IP)
 	var jsonB = []byte("{\"input\":\"hello\"}")
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonB))
 	req.Header.Add("Authorization", "Basic MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU42djJCS0sxZFhZRnBYbFBrY2NPRnFtMTJDZEFzTWdSVTRWck5aOWx5R1ZDR3VNREdJd1A=")
