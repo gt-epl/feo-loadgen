@@ -2,7 +2,7 @@ start=1
 end=10
 
 num_reqs=100
-tracefile="traffic_dur1000_lam1.0_stime10.0_rate4.0_site2.npy"
+tracefile="loads/traffic_dur1000_lam1.0_stime10.0_rate4.0_site2.npy"
 resdir="./results/r13"
 policy="roundrobin"
 mkdir -p $resdir
