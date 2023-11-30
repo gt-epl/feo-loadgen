@@ -1,0 +1,5 @@
+host,profile
+clabsvr,var_lam_loads_2rps/site1/traffic_dur1000_lam1.0_stime10_rate2.0_site1.npy
+clabcl0,var_lam_loads_2rps/site1/traffic_dur1000_lam0.1_stime10_rate2.0_site1.npy
+clabcl1,var_lam_loads_2rps/site1/traffic_dur1000_lam0.4_stime10_rate2.0_site1.npy
+clabcl2,var_lam_loads_2rps/site1/traffic_dur1000_lam0.4_stime10_rate2.0_site1.npy

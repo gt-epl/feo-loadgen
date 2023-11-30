@@ -24,8 +24,15 @@ def user(env, event_rate, mean_service_time, tracker):
     cur_users -= 1
 
 
-def system(env, num_users, arrival_rate, event_rate, mean_service_time, tracker):
-    for i in range(num_users):
+def system(env, start,duration, num_users, arrival_rate, event_rate, mean_service_time, tracker):
+    #for i in range(num_users):
+    while env.now < start:
+        yield env.timeout(start-env.now)
+
+    start=env.now
+    print("start,end, arrival:", start,start+duration,arrival_rate)
+
+    while env.now < start+duration:
         arrival_time = random.expovariate(arrival_rate)
         yield env.timeout(arrival_time)
         tracker.append(env.now)
@@ -35,7 +42,11 @@ def oneedge_sim_arrivals(duration, arrival_rate, event_rate, mean_service_time, 
     tracker = []
     env = simpy.Environment()
     num_users = int(duration*arrival_rate)
-    env.process(system(env, num_users, arrival_rate, event_rate, mean_service_time, tracker))
+    
+    env.process(system(env, 0, duration/2, num_users, arrival_rate, event_rate, mean_service_time, tracker))
+
+    env.process(system(env, duration/2, duration/2, num_users, arrival_rate/2, event_rate, mean_service_time, tracker))
+
     env.run(until=duration)
 
     start = tracker[0]

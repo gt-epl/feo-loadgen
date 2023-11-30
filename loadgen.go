@@ -15,7 +15,7 @@ import (
 )
 
 // TODO: change to user config
-const IP = "192.168.10.10:9696"
+var IP string
 
 /*COMPLICATED load generation*/
 // type httpResp struct {
@@ -77,9 +77,13 @@ type nonBlocking struct {
 
 func main() {
 	lflag := flag.Int("limit", 42, "an int")
+	duration := flag.Int("duration", 60, "duration (in seconds)")
 	tracefile := flag.String("trace", "./traffic_dur1000_lam1.0_stime10.0_rate1.0_site1.npy", "Trace file for load generation")
+	ipstr := flag.String("host", "192.168.10.10", "offload daemon host IP")
+
 	flag.Parse()
 	limit := *lflag
+	IP = *ipstr
 
 	//limit := 10
 	f, err := os.Open(*tracefile)
@@ -97,8 +101,14 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	go HandleResponse(nb, wg)
+
+	start := time.Now()
 	for i, d := range data {
-		if i >= limit {
+
+		// if i >= limit {
+		// 	break
+		// }
+		if time.Since(start).Seconds() >= float64(*duration) {
 			break
 		}
 		wg.Add(1)
