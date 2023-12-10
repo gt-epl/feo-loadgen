@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	b64 "encoding/base64"
 	"flag"
 	"fmt"
 	"log"
@@ -80,9 +81,11 @@ func main() {
 	duration := flag.Int("duration", 60, "duration (in seconds)")
 	tracefile := flag.String("trace", "./traffic_dur1000_lam1.0_stime10.0_rate1.0_site1.npy", "Trace file for load generation")
 	ipstr := flag.String("host", "192.168.10.10", "offload daemon host IP")
+	qpsptr := flag.Int("qps", 0, "qps (queries per second)")
 
 	flag.Parse()
 	limit := *lflag
+	qps := *qpsptr
 	IP = *ipstr
 
 	//limit := 10
@@ -103,30 +106,53 @@ func main() {
 	go HandleResponse(nb, wg)
 
 	start := time.Now()
+	var sleep_ms int
+	if qps != 0 {
+		sleep_ms = 1000 / qps
+	}
 	for i, d := range data {
 
 		// if i >= limit {
 		// 	break
 		// }
+
 		if time.Since(start).Seconds() >= float64(*duration) {
 			break
 		}
+
 		wg.Add(1)
 		go Request(nb)
-		time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
-		// time.Sleep(time.Duration(40) * time.Millisecond)
+		if qps == 0 {
+			time.Sleep(time.Duration(d*1e9) * time.Nanosecond)
+		} else {
+			time.Sleep(time.Duration(sleep_ms) * time.Millisecond)
+		}
 		i++
 	}
 	wg.Wait()
 }
 
+func fillReqBody() []byte {
+	img_data, err := os.ReadFile("./coldstart.jpeg")
+	if err != nil {
+		log.Fatalf("Unable to read file: %s\n", err)
+	}
+	sEnc := b64.StdEncoding.EncodeToString(img_data)
+	body := fmt.Sprintf("{\"img\":\"%s\"}", sEnc)
+	return []byte(body)
+}
 func Request(nb chan nonBlocking) {
 
 	client := &http.Client{}
 	start := time.Now()
+
 	template := "http://%s/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
+	// template := "http://%s/api/v1/namespaces/guest/actions/detect?blocking=true&result=true"
+
 	url := fmt.Sprintf(template, IP)
 	var jsonB = []byte("{\"input\":\"hello\"}")
+	// jsonB := fillReqBody()
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonB))
 	req.Header.Add("Authorization", "Basic MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU42djJCS0sxZFhZRnBYbFBrY2NPRnFtMTJDZEFzTWdSVTRWck5aOWx5R1ZDR3VNREdJd1A=")
 	req.Header.Add("Content-Type", "application/json")
@@ -153,6 +179,21 @@ func HandleResponse(nb chan nonBlocking, wg *sync.WaitGroup) {
 		if get.Error != nil {
 			log.Println(get.Error)
 		} else {
+			if get.Response.StatusCode != 200 {
+				fmt.Println(get.Response.Status)
+			}
+			// body, err := io.ReadAll(get.Response.Body)
+
+			// if err != nil {
+			// 	fmt.Println("unable to read response body")
+			// }
+			// var objmap map[string]json.RawMessage
+			// err = json.Unmarshal([]byte(body), &objmap)
+			// if err != nil {
+			// 	fmt.Println("unable to parse body")
+			// }
+			// fmt.Println(get.e2e, string(objmap["invoke_time"]))
+
 			fmt.Println(get.e2e)
 		}
 		wg.Done()
