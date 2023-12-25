@@ -55,8 +55,8 @@ conns = [Connection(host, config=cfg) for host in hosts]
 controller_conn =  Connection(controller, config=cfg)
 
 
-if COPY_BINS:
-    print('[+] Copy loadgen binary')
+if COPY_LOAD_BIN:
+    print('[+] Build and copy loadgen binary')
     for c in conns:
         try:
             os.system(f'go build')
@@ -94,9 +94,9 @@ if CONFIG:
     print(f'[+] Sync Config: {policy}')
     try:
         if CONFIG_EXEC_LOCAL:
-            os.system(f'bash ../feo/utils/sync.sh {policy}')
+            os.system(f'bash ../feo/utils/sync.sh {policy} True True')
         else:
-            controller_conn.run(f'bash ~/feo/utils/sync.sh {policy}')
+            controller_conn.run(f'bash ~/feo/utils/sync.sh {policy} True False')
     except Exception as e:
         print(e)
         pass
