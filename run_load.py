@@ -6,10 +6,11 @@ import os
 import time
 
 policy="central"
-profile=sys.argv[1]
+profile_filename=sys.argv[1]
+PROFILE_PATH=f'./profiles/{profile_filename}'
 RESDIR=f'../feodata/clab-181357/run_load/{policy}'
 
-UID           = f'{profile[:-4]}-p2p20ms.out' # loadgen e2e latency is captured in this file
+UID           = f'{profile_filename[:-4]}-p2p20ms.out' # loadgen e2e latency is captured in this file
 COPY_BINS     = False # copies the loadgen binary along with any function input if you want to
 KILL_LOAD     = True  
 KILL_FEO      = True
@@ -28,7 +29,7 @@ hosts = ['clabsvr','clabcl0','clabcl1','clabcl2']
 controller = 'clabcl3'
 
 ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,14)]
-profiles = pd.read_csv(profile)
+profiles = pd.read_csv(PROFILE_PATH)
 profiles = profiles.set_index('host')
 conns = [Connection(host, config=cfg) for host in hosts]
 controller_conn =  Connection(controller, config=cfg)
