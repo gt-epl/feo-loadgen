@@ -14,8 +14,8 @@ RESDIR=f'../feodata/clab-181357/run_load/{policy}'
 SSH_CONFIG_PATH = "/Users/anirudh/.ssh/config.d/clab.sshconfig"
 OPENWHISK_IP = "http://localhost:3233" # Ip of the openwhisk server running in each node
 app_name = 'copy' # The directory name of the application under 'feo/apps'
-SETUP_OPENWHISK_SUDO = True # Run the RUN_OPENWHISK command in sudoer 
-CONFIG_EXEC_LOCAL = True # Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
+SETUP_OPENWHISK_SUDO = False # Run the RUN_OPENWHISK command in sudoer 
+CONFIG_EXEC_LOCAL = False # Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
 
 # The names below should match the following: 
 #  1) The alias defined in sshconfig (e.g. `ssh clabcl0`)
