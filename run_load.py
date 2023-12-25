@@ -20,6 +20,7 @@ CONFIG_EXEC_LOCAL = False # Set to True if executing 'feo/utils/sync.ch' from th
 # The names below should match the following: 
 #  1) The alias defined in sshconfig (e.g. `ssh clabcl0`)
 #  2) The first column in profiles under 'loadgen/profile'
+#  3) The order of peer addresses under 'feo/config.yml' 
 hosts = ['clabsvr','clabcl0','clabcl1','clabcl2']
 controller = 'clabcl3' # The server which will run the controller for 'central' policy.
 
@@ -39,7 +40,7 @@ FETCH_RESULTS   = False # Fetch results from 'hosts' into RESDIR
 
 ### END CONFIGURATION AREA ###
 
-profile_filename=sys.argv[1] # Filename under 'loadgen/policies' (e.g., 'profile.csv')
+profile_filename=sys.argv[1] # Filename under 'loadgen/profiles' (e.g., 'profile.csv')
 PROFILE_PATH=f'./profiles/{profile_filename}'
 UID           = f'{profile_filename[:-4]}-p2p20ms.out' # loadgen e2e latency is captured in this file. #:-4 removes the '.csv' extension at end of profile name
 
