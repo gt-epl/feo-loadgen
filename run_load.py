@@ -59,6 +59,7 @@ if COPY_BINS:
     print('[+] Copy loadgen binary')
     for c in conns:
         try:
+            os.system(f'go build')
             c.put('loadgen','/tmp/')
             c.put('coldstart.jpeg', '/tmp/')
         except Exception as e:
