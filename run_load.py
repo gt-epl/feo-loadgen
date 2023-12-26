@@ -14,8 +14,7 @@ RESDIR=f'../feodata/clab-181357/run_load/{policy}'
 SSH_CONFIG_PATH = "/Users/anirudh/.ssh/config.d/clab.sshconfig"
 OPENWHISK_IP = "http://localhost:3233" # Ip of the openwhisk server running in each node
 app_name = 'copy' # The directory name of the application under 'feo/apps'
-SETUP_OPENWHISK_SUDO = False # Run the RUN_OPENWHISK command in sudoer 
-CONFIG_EXEC_LOCAL = False # Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
+CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
 
 # The names below should match the following: 
 #  1) The alias defined in sshconfig (e.g. `ssh clabcl0`)
@@ -60,7 +59,7 @@ if COPY_LOAD_BIN:
     print('[+] Build and copy loadgen binary')
     for c in conns:
         try:
-            os.system(f'go build')
+            os.system(f'GOOS=linux GOARCH=amd64 go build')
             c.put('loadgen','/tmp/')
             c.put('coldstart.jpeg', '/tmp/')
         except Exception as e:
@@ -94,6 +93,7 @@ if KILL_FEO:
 if CONFIG:
     print(f'[+] Sync Config: {policy}')
     try:
+        # Refer to 'feo/README.md' for more details.
         if CONFIG_EXEC_LOCAL:
             os.system(f'bash ../feo/utils/sync.sh {policy} True True')
         else:
@@ -106,10 +106,7 @@ if RUN_OPENWHISK:
     print('[+] Run standalone openwhisk server')
     for c in conns:
         try:
-            sudo_str = ''
-            if SETUP_OPENWHISK_SUDO:
-                sudo_str = 'sudo'
-            c.run(f'{sudo_str} bash ~/utils/openwhisk_server.sh {OPENWHISK_IP}')
+            c.run(f'bash ~/utils/openwhisk_server.sh {OPENWHISK_IP}')
         except Exception as e:
             print(e)
             pass
@@ -127,7 +124,7 @@ if SET_LATENCY:
     print(f'[+] Set the inter-node latency')
     for c in conns:
         try:
-            c.run(f'bash ~/utils/set_latency.sh')
+            c.run(f'bash ~/utils/set_latency.sh 10')
         except Exception as e:
             print(e)
             pass
