@@ -9,32 +9,48 @@ import time
 ### START CONFIGURATION AREA ###
 # On each run, adjust the configurations below:
 
-policy="central" # Available candidates are in 'feo/offload.go'
-RESDIR=f'../feodata/clab-181357/run_load/{policy}'
-SSH_CONFIG_PATH = "/Users/anirudh/.ssh/config.d/clab.sshconfig"
+policy="federated" # Available candidates are in 'feo/offload.go'
+RESDIR=f'../feodata/az-exp1/run_load/{policy}'
+
+# TODO: hosts configuration could be automatically generated. 
+SSH_CONFIG_PATH = "/Users/anirudh/.ssh/config.d/az.sshconfig"
 OPENWHISK_IP = "http://localhost:3233" # Ip of the openwhisk server running in each node
-app_name = 'copy' # The directory name of the application under 'feo/apps'
+
+# TODO: since we have many apps, app configuration could be separate file. Loadgen could read the configs from the said files
+app_name = 'fibtest' # The directory name of the application under 'feo/apps'
+
+# TODO: force experiment trigger from local w/e that may be i.e., do away with this op.
 CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
 
 # The names below should match the following: 
 #  1) The alias defined in sshconfig (e.g. `ssh clabcl0`)
 #  2) The first column in profiles under 'loadgen/profile'
 #  3) The order of peer addresses under 'feo/config.yml' 
+# TODO: need a cleaner way to specify ssh aliases, public ips, private ips once in for all. 
+# i.e., this script should work off a hosts.csv file
+# it should possibly create the ssh config file.
+
 hosts = ['clabcl0','clabcl1','clabcl2', 'clabcl3']
 controller = 'clabsvr' # The server which will run the controller for 'central' policy.
+ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,14)]
+
+hosts = [f'az{i}' for i in range(4)]
+controller = 'az4'
+# ip input for loadgen. 
+ips = [f'192.168.10.{last_octet}:9696' for last_octet in [7,8,4,5]]
 
 COPY_LOAD_BIN   = False # Builds and copies the Loadgen binary.
-KILL_LOAD       = True  
+KILL_LOAD       = False  
 KILL_FEO        = True
 LOAD_PROFILE    = False # Will copy profile, i.e. var_lam_loads
-CONFIG          = False # run sync.sh
+CONFIG          = True # run sync.sh
 RUN_OPENWHISK   = False # Runs the standalone openwhisk image on each host in 'hosts'.
-CREATE_ACTION   = True  # Runs the `create_action.sh` script for the application defined in `app_name`
+CREATE_ACTION   = False  # Runs the `create_action.sh` script for the application defined in `app_name`
 SET_LATENCY     = False # Runs the `set_latency.sh` script to set the inter-node latency.
 RUN_FEO         = True  # Runs the feo binary on each host in 'hosts'. Also runs central_server in 'central' policy.
 WARMUP          = True  # Generates dummy requests to avoid coldstart latency
-ACTUAL          = False # Generate load using the loadgen binary
-FETCH_RESULTS   = False # Fetch results from 'hosts' into RESDIR
+ACTUAL          = True # Generate load using the loadgen binary
+FETCH_RESULTS   = True # Fetch results from 'hosts' into RESDIR
 
 
 ### END CONFIGURATION AREA ###
@@ -48,7 +64,6 @@ cfg.ssh_config_path = SSH_CONFIG_PATH
 cfg.load_ssh_config()
 
 
-ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,14)]
 profiles = pd.read_csv(PROFILE_PATH)
 profiles = profiles.set_index('host')
 conns = [Connection(host, config=cfg) for host in hosts]
@@ -122,9 +137,11 @@ if CREATE_ACTION:
 
 if SET_LATENCY:
     print(f'[+] Set the inter-node latency')
+    intf="eth0" #for azure, eth1 for clab
     for c in conns:
         try:
-            c.run(f'bash ~/utils/set_latency.sh 10')
+            c.run(f'bash ~/utils/unset_latency.sh {intf} > /dev/null')
+            c.run(f'bash ~/utils/set_latency.sh {intf} 5 > /dev/null')
         except Exception as e:
             print(e)
             pass
