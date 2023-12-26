@@ -20,8 +20,8 @@ CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True
 #  1) The alias defined in sshconfig (e.g. `ssh clabcl0`)
 #  2) The first column in profiles under 'loadgen/profile'
 #  3) The order of peer addresses under 'feo/config.yml' 
-hosts = ['clabsvr','clabcl0','clabcl1','clabcl2']
-controller = 'clabcl3' # The server which will run the controller for 'central' policy.
+hosts = ['clabcl0','clabcl1','clabcl2', 'clabcl3']
+controller = 'clabsvr' # The server which will run the controller for 'central' policy.
 
 COPY_LOAD_BIN   = False # Builds and copies the Loadgen binary.
 KILL_LOAD       = True  
