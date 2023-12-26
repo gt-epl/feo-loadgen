@@ -3,6 +3,8 @@ import simpy
 import random
 import sys
 import numpy as np
+import os
+import pandas as pd
 
 total = 0
 max_users = 0
@@ -56,6 +58,39 @@ def oneedge_sim_arrivals(duration, arrival_rate, event_rate, mean_service_time, 
         np.save(f'./traffic_dur{duration}_lam{arrival_rate}_stime{mean_service_time}_rate{event_rate}_site{inc}.npy', ia_arr)
     return iter(ia_arr)
 
+def cab(env, route , node_array, rps):
+    idx = int(route['node'].at[0])
+    node = node_array[idx]
+
+    for index, row in route[1:].iterrows():
+            while True:
+
+                node.append(env.now)
+
+                yield env.timeout(1/rps)
+
+                if env.now > row['ts']:
+                    idx = int(row['node'])
+                    node = node_array[idx]
+                    break
+            
+        
+def sfcabs_arrivals(routes, num_centroids, rps) :
+    node_arr = []
+    for i in range(num_centroids):
+        node_arr.append([])
+    
+    env = simpy.Environment()
+    for route in routes:
+        env.process(cab(env, route, node_arr, rps))
+
+    env.run()
+
+    for i,node in enumerate(node_arr):
+        start = node[0]
+        ia_arr = np.ediff1d(node)
+        ia_arr = np.insert(ia_arr, 0, start)
+        np.save(f'sfcabs-load-site{i}.npy', ia_arr)
 
 
 parser = argparse.ArgumentParser(description="Federared Orchestration Simulation")
@@ -64,7 +99,23 @@ parser.add_argument("--lam", type=float, nargs="?", default=0.1, help="default=0
 parser.add_argument("--stime", type=float, nargs="?", default=10, help="default=10")
 parser.add_argument("--rate", type=float, nargs="?", default=1, help="default=1")
 parser.add_argument("--inc", type=int, nargs="?", default=0)
+parser.add_argument("--sfcabs", type=bool, const='False', nargs="?")
 args = parser.parse_args()
+
+if args.sfcabs:
+    print("generating from sfcabs dataset!")
+    base = '../datasets/routes'
+    files = [f'{base}/{file}' for file in os.listdir(base)]
+    routes = []
+    
+    for file in files:
+        df = pd.read_csv(file)
+        routes.append(df)
+    
+    num_centroids = 12
+    rps=10
+    sfcabs_arrivals(routes, num_centroids, rps)
+    exit()
 
 if args.inc != 0:
     for i in range(1,args.inc+1):

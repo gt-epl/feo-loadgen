@@ -2,13 +2,11 @@
 
 ## how to use
 
-### Single Run
-- `exp.sh` can be used to run the loadprofile on an edge node. Modify loadgen to change IP
-- `./exp.sh <num_requests> <tracefile> <output>`
-- e.g., `./exp.sh 100 traffic_dur1000_lam1.0_stime10.0_rate4.0_site2.npy tmp`
+1. `run_load.py` is the main experiment runner script
+2. `generate_traffic.py` generates static tracefiles for load at every edge node
 
 
-### Multi Run
-- `./run.sh`
-- modify `run.sh` as appropriate.
+### Additional Info
 
+1. `generate_traffic.py` uses to the user arrival model first expressed in OneEdge.
+2. The `sfcabs` variant uses the cab routes whose routes are generated in the sfcabs notebook in feo-notebooks to produce aggregate load tracefiles at candidate edge nodes.
