@@ -5,28 +5,48 @@ import sys
 import os
 import time
 
-policy="central"
-profile_filename=sys.argv[1]
-PROFILE_PATH=f'./profiles/{profile_filename}'
-RESDIR=f'../feodata/clab-181357/run_load/{policy}'
 
-UID           = f'{profile_filename[:-4]}-p2p20ms.out' # loadgen e2e latency is captured in this file
-COPY_BINS     = False # copies the loadgen binary along with any function input if you want to
-KILL_LOAD     = True  
-KILL_FEO      = True
-LOAD_PROFILE  = False
-CONFIG        = False # run sync.sh. syncs feo and central_server binary along with the appropriate policy config
-RUN_FEO       = True
-WARMUP        = True
-ACTUAL        = False
-FETCH_RESULTS = False
+### START CONFIGURATION AREA ###
+# On each run, adjust the configurations below:
+
+policy="central" # Available candidates are in 'feo/offload.go'
+RESDIR=f'../feodata/clab-181357/run_load/{policy}'
+SSH_CONFIG_PATH = "/Users/anirudh/.ssh/config.d/clab.sshconfig"
+OPENWHISK_IP = "http://localhost:3233" # Ip of the openwhisk server running in each node
+app_name = 'copy' # The directory name of the application under 'feo/apps'
+CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
+
+# The names below should match the following: 
+#  1) The alias defined in sshconfig (e.g. `ssh clabcl0`)
+#  2) The first column in profiles under 'loadgen/profile'
+#  3) The order of peer addresses under 'feo/config.yml' 
+hosts = ['clabsvr','clabcl0','clabcl1','clabcl2']
+controller = 'clabcl3' # The server which will run the controller for 'central' policy.
+
+COPY_LOAD_BIN   = False # Builds and copies the Loadgen binary.
+KILL_LOAD       = True  
+KILL_FEO        = True
+LOAD_PROFILE    = False # Will copy profile, i.e. var_lam_loads
+CONFIG          = False # run sync.sh
+RUN_OPENWHISK   = False # Runs the standalone openwhisk image on each host in 'hosts'.
+CREATE_ACTION   = True  # Runs the `create_action.sh` script for the application defined in `app_name`
+SET_LATENCY     = False # Runs the `set_latency.sh` script to set the inter-node latency.
+RUN_FEO         = True  # Runs the feo binary on each host in 'hosts'. Also runs central_server in 'central' policy.
+WARMUP          = True  # Generates dummy requests to avoid coldstart latency
+ACTUAL          = False # Generate load using the loadgen binary
+FETCH_RESULTS   = False # Fetch results from 'hosts' into RESDIR
+
+
+### END CONFIGURATION AREA ###
+
+profile_filename=sys.argv[1] # Filename under 'loadgen/profiles' (e.g., 'profile.csv')
+PROFILE_PATH=f'./profiles/{profile_filename}'
+UID           = f'{profile_filename[:-4]}-p2p20ms.out' # loadgen e2e latency is captured in this file. #:-4 removes the '.csv' extension at end of profile name
 
 cfg = Config()
-cfg.ssh_config_path = "/Users/anirudh/.ssh/config.d/clab.sshconfig"
+cfg.ssh_config_path = SSH_CONFIG_PATH
 cfg.load_ssh_config()
 
-hosts = ['clabsvr','clabcl0','clabcl1','clabcl2']
-controller = 'clabcl3'
 
 ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,14)]
 profiles = pd.read_csv(PROFILE_PATH)
@@ -35,10 +55,11 @@ conns = [Connection(host, config=cfg) for host in hosts]
 controller_conn =  Connection(controller, config=cfg)
 
 
-if COPY_BINS:
-    print('[+] Copy loadgen binary')
+if COPY_LOAD_BIN:
+    print('[+] Build and copy loadgen binary')
     for c in conns:
         try:
+            os.system(f'GOOS=linux GOARCH=amd64 go build')
             c.put('loadgen','/tmp/')
             c.put('coldstart.jpeg', '/tmp/')
         except Exception as e:
@@ -72,10 +93,42 @@ if KILL_FEO:
 if CONFIG:
     print(f'[+] Sync Config: {policy}')
     try:
-        conns[0].run(f'bash ~/feo/utils/sync.sh {policy}')
+        # Refer to 'feo/README.md' for more details.
+        if CONFIG_EXEC_LOCAL:
+            os.system(f'bash ../feo/utils/sync.sh {policy} True True')
+        else:
+            controller_conn.run(f'bash ~/feo/utils/sync.sh {policy} True False')
     except Exception as e:
         print(e)
         pass
+
+if RUN_OPENWHISK: 
+    print('[+] Run standalone openwhisk server')
+    for c in conns:
+        try:
+            c.run(f'bash ~/utils/openwhisk_server.sh {OPENWHISK_IP}')
+        except Exception as e:
+            print(e)
+            pass
+
+if CREATE_ACTION:
+    print(f'[+] Create the action for the app {app_name}')
+    for c in conns:
+        try:
+            c.run(f'bash ~/apps/{app_name}/create_action.sh {OPENWHISK_IP}')
+        except Exception as e:
+            print(e)
+            pass
+
+if SET_LATENCY:
+    print(f'[+] Set the inter-node latency')
+    for c in conns:
+        try:
+            c.run(f'bash ~/utils/set_latency.sh 10')
+        except Exception as e:
+            print(e)
+            pass
+
 
 if RUN_FEO:
     if policy == "central":
