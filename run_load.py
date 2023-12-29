@@ -99,7 +99,7 @@ if KILL_FEO:
             print(e)
             pass
 
-    if policy in ["central"]:
+    if policy in ["central", "epoch", "hybrid"]:
         try:
             controller_conn.run('killall central_server')
         except Exception as e:
@@ -148,7 +148,7 @@ if SET_LATENCY:
 
 
 if RUN_FEO:
-    if policy == "central":
+    if policy in ["central", "epoch", "hybrid"]:
         print(f'[+] run controller on {controller}')
         controller_conn.run("bash -c 'nohup ./central_server > central_server.log 2>&1 &'")
 
