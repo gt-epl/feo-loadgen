@@ -10,10 +10,10 @@ import time
 # On each run, adjust the configurations below:
 
 policy="federated" # Available candidates are in 'feo/offload.go'
-RESDIR=f'../feodata/az-exp1/run_load/{policy}'
+RESDIR=f'../feodata/cluster_exp_fibtest_p9/run_load/{policy}'
 
 # TODO: hosts configuration could be automatically generated. 
-SSH_CONFIG_PATH = "/Users/anirudh/.ssh/config.d/az.sshconfig"
+SSH_CONFIG_PATH = "/home/jithin/.ssh/config"
 OPENWHISK_IP = "http://localhost:3233" # Ip of the openwhisk server running in each node
 
 # TODO: since we have many apps, app configuration could be separate file. Loadgen could read the configs from the said files
@@ -30,17 +30,17 @@ CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True
 # i.e., this script should work off a hosts.csv file
 # it should possibly create the ssh config file.
 
-hosts = ['clabcl0','clabcl1','clabcl2', 'clabcl3']
+hosts = ['clabcl0','clabcl1','clabcl2', 'clabcl3', 'clabcl4', 'clabcl5', 'clabcl6', 'clabcl7', 'clabcl8', 'clabcl9']
 controller = 'clabsvr' # The server which will run the controller for 'central' policy.
-ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,14)]
+ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,20)]
 
-hosts = [f'az{i}' for i in range(4)]
-controller = 'az4'
-# ip input for loadgen. 
-ips = [f'192.168.10.{last_octet}:9696' for last_octet in [7,8,4,5]]
+# hosts = [f'az{i}' for i in range(4)]
+# controller = 'az4'
+# # ip input for loadgen. 
+# ips = [f'192.168.10.{last_octet}:9696' for last_octet in [7,8,4,5]]
 
-COPY_LOAD_BIN   = False # Builds and copies the Loadgen binary.
-KILL_LOAD       = False  
+COPY_LOAD_BIN   = True # Builds and copies the Loadgen binary.
+KILL_LOAD       = True  
 KILL_FEO        = True
 LOAD_PROFILE    = False # Will copy profile, i.e. var_lam_loads
 CONFIG          = True # run sync.sh
@@ -137,10 +137,15 @@ if CREATE_ACTION:
 
 if SET_LATENCY:
     print(f'[+] Set the inter-node latency')
-    intf="eth0" #for azure, eth1 for clab
+    intf="enp6s0f1" #for azure, eth1 for clab
     for c in conns:
         try:
             c.run(f'bash ~/utils/unset_latency.sh {intf} > /dev/null')
+        except Exception as e:
+            print(e)
+            pass
+
+        try:
             c.run(f'bash ~/utils/set_latency.sh {intf} 5 > /dev/null')
         except Exception as e:
             print(e)
