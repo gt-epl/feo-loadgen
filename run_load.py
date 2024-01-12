@@ -80,13 +80,9 @@ if COPY_LOAD_BIN:
     print('[+] Build and copy loadgen binary')
     for c in conns:
         try:
-            os.system(f'GOOS=linux GOARCH=amd64 go build loadgen.go')
+            os.system(f'GOOS=linux GOARCH=amd64 go build')
             c.put('loadgen','/tmp/')
             c.put('coldstart.jpeg', '/tmp/')
-
-            if RUN_MULTI_LOADGEN:
-                os.system(f'GOOS=linux GOARCH=amd64 go build loadgen2.go')
-                c.put('loadgen2','/tmp/')
 
         except Exception as e:
             print(e)
@@ -97,7 +93,6 @@ if KILL_LOAD:
     for c in conns:
         try:
             c.run('killall loadgen')
-            c.run('killall loadgen2')
         except Exception as e:
             print(e)
             pass
@@ -234,16 +229,10 @@ def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str, 
     print(f"Running {profile} for {host}: {uidstr}")
     with conn.cd('/tmp/'):
         if not uid:
-            if app == app_name:
-                conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} > /dev/null")
-            else:
-                conn.run(f"./loadgen2 -duration {duration} -trace {profile} -host {ip} > /dev/null")
+            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app} > /dev/null")
         else:
             outstr = app + "-" + uid
-            if app == app_name:
-                conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} > {outstr}")
-            else:
-                conn.run(f"./loadgen2 -duration {duration} -trace {profile} -host {ip} > {outstr}")
+            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app} > {outstr}")
 
 def run_tasks(uid=None):
     tasks = [ 
