@@ -1,4 +1,5 @@
 from fabric import Connection,Config
+from collections import namedtuple
 import threading
 import pandas as pd
 import sys
@@ -18,9 +19,14 @@ SSH_CONFIG_PATH = "/home/jithin/.ssh/config"
 OPENWHISK_IP = "http://localhost:3233" # Ip of the openwhisk server running in each node
 
 # TODO: since we have many apps, app configuration could be separate file. Loadgen could read the configs from the said files
-app_name = 'fibtest' # The directory name of the application under 'feo/apps'
 
-app_name_2 = 'fibtest2' # Only used if RUN_MULTI_LOADGEN is True.
+# Define a namedtuple
+App = namedtuple('App', ['name', 'initPort', 'numReplicas'])
+
+apps = [
+    App(name= 'fiblocal', initPort= '9000', numReplicas= '10'),
+    App(name= 'fiblocal2', initPort= '9010', numReplicas= '10'),
+]
 
 # TODO: force experiment trigger from local w/e that may be i.e., do away with this op.
 CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
@@ -48,16 +54,17 @@ KILL_LOAD       = True
 KILL_FEO        = True
 LOAD_PROFILE    = True # Will copy profile, i.e. var_lam_loads
 CONFIG          = True # run sync.sh
-RUN_OPENWHISK   = False # Runs the standalone openwhisk image on each host in 'hosts'.
 DEPLOY_FIBTEST  = False
-CREATE_ACTION   = False  # Runs the `create_action.sh` script for the application defined in `app_name`
 SET_LATENCY     = False # Runs the `set_latency.sh` script to set the inter-node latency.
 RUN_FEO         = True  # Runs the feo binary on each host in 'hosts'. Also runs central_server in 'central' policy.
-WARMUP          = False  # Generates dummy requests to avoid coldstart latency
+REGISTER_APP    = True # Registers the app & port numbers on Feo. Must be run when feo binary is running.
 ACTUAL          = True # Generate load using the loadgen binary
 FETCH_RESULTS   = True # Fetch results from 'hosts' into RESDIR
 
-RUN_MULTI_LOADGEN = True # Currently runs each loadgen instance twice simultaneously on each node.
+# No longer valid after we give up Openwhisk
+WARMUP          = False  # Generates dummy requests to avoid coldstart latency
+RUN_OPENWHISK   = False # Runs the standalone openwhisk image on each host in 'hosts'.
+CREATE_ACTION   = False  # Runs the `create_action.sh` script for the application defined in `app_name`
 
 ### END CONFIGURATION AREA ###
 
@@ -158,18 +165,13 @@ if DEPLOY_FIBTEST:
             pass
 
 if CREATE_ACTION:
-    print(f'[+] Create the action for the app {app_name}')
-    for c in conns:
-        try:
-            c.run(f'bash ~/apps/{app_name}/create_action.sh {OPENWHISK_IP}')
-        except Exception as e:
-            print(e)
-            pass
-    
-    if RUN_MULTI_LOADGEN:
-        for c in conns:
+    print(f'[+] Create Actions')
+    for i,c in enumerate(conns):
+        print(f'[.] Host {hosts[i]}')
+        for app in apps:
+            print(f'  [.] Create action for app {app.name}')
             try:
-                c.run(f'bash ~/apps/{app_name_2}/create_action.sh {OPENWHISK_IP}')
+                c.run(f'bash ~/apps/{app.name}/create_action.sh {OPENWHISK_IP}')
             except Exception as e:
                 print(e)
                 pass
@@ -203,10 +205,22 @@ if RUN_FEO:
         print(f'Running feo @ {hosts[i]}')
         with c.cd('/tmp/'):
             try:
-                c.run("bash -c 'nohup ./feo -port1 9000 -count1 10 -port2 9010 -count2 10 > feo.log 2>&1 &'", pty=False)
+                c.run("bash -c 'nohup ./feo > feo.log 2>&1 &'", pty=False)
             except Exception as e:
                 print(e)
                 exit()
+
+if REGISTER_APP:
+    print(f'[+] Register apps')
+    for i,c in enumerate(conns):
+        print(f'[.] Host {hosts[i]}')
+        for app in apps:
+            print(f'  [.] Register app {app.name} with init port {app.initPort} and {app.numReplicas} replicas')
+            try:
+                c.run(f'bash ~/utils/register_action.sh {app.name} {app.initPort} {app.numReplicas} {ips[i]}')
+            except Exception as e:
+                print(e)
+                pass
 
 if LOAD_PROFILE:
     print("[+] Transfer load files")
@@ -219,7 +233,11 @@ if LOAD_PROFILE:
         c.put(profile, f"/tmp")
 
 
-def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str, app :str):
+def run_background(conn : Connection, command : str):
+    conn.run(f"bash -c 'nohup {command} 2>&1 &'", pty=False)
+
+
+def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str):
     duration = 60
 
     profile = profile_fp.split('/')[-1]
@@ -227,40 +245,36 @@ def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str, 
     if not uidstr:
         uidstr="warmup"
     print(f"Running {profile} for {host}: {uidstr}")
-    with conn.cd('/tmp/'):
+    with conn.cd('/tmp/'):    
+        for app in apps[:-1]:
+            print(f'Running loadgen for app {app.name} in host {host}')
+            if not uid:
+                run_background(conn, f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app.name} > /dev/null")
+            else:
+                outstr = app.name + "-" + uid
+                run_background(conn, f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app.name} > {outstr}")
+        
+        print(f'Running loadgen for app {apps[-1].name} in host {host}')
         if not uid:
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app} > /dev/null")
+            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[-1].name} > /dev/null")
         else:
-            outstr = app + "-" + uid
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app} > {outstr}")
+            outstr = apps[-1].name + "-" + uid
+            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[-1].name} > {outstr}")
 
 def run_tasks(uid=None):
-    tasks = [ 
-            threading.Thread( target=run_load,
-                            args=(host, 
-                                  ips[i],
-                                  conns[i],
-                                  profiles.loc[host].iloc[0],
-                                  uid,
-                                  app_name))
-            for i,host in enumerate(hosts)]
-    
-    if RUN_MULTI_LOADGEN:
-        tasks2 = [ 
-                threading.Thread( target=run_load,
-                                args=(host, 
-                                    ips[i],
-                                    conns[i],
-                                    profiles.loc[host].iloc[0],
-                                    uid,
-                                    app_name_2))
-                for i,host in enumerate(hosts)]
-        tasks = tasks + tasks2
+    task = [
+        threading.Thread( target=run_load,
+                        args=(host, 
+                                ips[i],
+                                conns[i],
+                                profiles.loc[host].iloc[0],
+                                uid))
+        for i,host in enumerate(hosts)]
 
-    for t in tasks:
+    for t in task:
         t.start()
 
-    for t in tasks:
+    for t in task:
         t.join()
 
 if WARMUP: 
@@ -276,9 +290,7 @@ if FETCH_RESULTS:
         print(f"[+] {host}: Transfering result file:")
         dst = f'{RESDIR}/{host}'
         os.system(f'mkdir -p {dst}')
-        outstr = app_name + "-" + UID
-        os.system(f'rsync -avz {host}:/tmp/{outstr} {dst}/')
-        if RUN_MULTI_LOADGEN:
-            outstr2 = app_name_2 + "-" + UID
-            os.system(f'rsync -avz {host}:/tmp/{outstr2} {dst}/')
-        
+
+        for app in apps:
+            outstr = app.name + "-" + UID
+            os.system(f'rsync -avz {host}:/tmp/{outstr} {dst}/')
