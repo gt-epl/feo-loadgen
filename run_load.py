@@ -294,4 +294,3 @@ if FETCH_RESULTS:
         for app in apps:
             outstr = app.name + "-" + UID
             os.system(f'rsync -avz {host}:/tmp/{outstr} {dst}/')
-        
