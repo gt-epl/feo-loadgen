@@ -17,6 +17,8 @@ import (
 
 // TODO: change to user config
 var IP string
+var APP string
+var URL string
 
 /*COMPLICATED load generation*/
 // type httpResp struct {
@@ -81,12 +83,18 @@ func main() {
 	duration := flag.Int("duration", 60, "duration (in seconds)")
 	tracefile := flag.String("trace", "./traffic_dur1000_lam1.0_stime10.0_rate1.0_site1.npy", "Trace file for load generation")
 	ipstr := flag.String("host", "192.168.10.10:9696", "offload daemon host IP")
+	appstr := flag.String("app","fibtest", "application to send requests to")
 	qpsptr := flag.Int("qps", 0, "qps (queries per second)")
 
 	flag.Parse()
 	limit := *lflag
 	qps := *qpsptr
 	IP = *ipstr
+	APP = *appstr
+
+	template := "http://%s/api/v1/namespaces/guest/actions/%s?blocking=true&result=true"
+
+	URL = fmt.Sprintf(template, IP, APP)
 
 	//limit := 10
 	f, err := os.Open(*tracefile)
@@ -148,14 +156,14 @@ func Request(nb chan nonBlocking) {
 
 	// template := "http://%s/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
 	// template := "http://%s/api/v1/namespaces/guest/actions/detect?blocking=true&result=true"
-	template := "http://%s/api/v1/namespaces/guest/actions/fibtest?blocking=true&result=true"
+	// template := "http://%s/api/v1/namespaces/guest/actions/fibtest?blocking=true&result=true"
 
-	url := fmt.Sprintf(template, IP)
+	// url := fmt.Sprintf(template, IP)
 	// var jsonB = []byte("{\"input\":\"hello\"}")
 	// jsonB := fillReqBody()
 	var jsonB = []byte("{\"ms\":\"100\"}")
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonB))
+	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(jsonB))
 	req.Header.Add("Authorization", "Basic MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU42djJCS0sxZFhZRnBYbFBrY2NPRnFtMTJDZEFzTWdSVTRWck5aOWx5R1ZDR3VNREdJd1A=")
 	req.Header.Add("Content-Type", "application/json")
 
@@ -197,7 +205,7 @@ func HandleResponse(nb chan nonBlocking, wg *sync.WaitGroup) {
 			// }
 			// fmt.Println(get.e2e, string(objmap["invoke_time"]))
 
-			fmt.Println(get.e2e)
+			fmt.Println(get.e2e, ",", get.Response.Header.Get("Invoc-Loc"), ",", get.Response.Header.Get("Invoc-Time"))
 		}
 		wg.Done()
 	}
