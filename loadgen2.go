@@ -156,7 +156,7 @@ func Request(nb chan nonBlocking) {
 
 	// template := "http://%s/api/v1/namespaces/guest/actions/copy?blocking=true&result=true"
 	// template := "http://%s/api/v1/namespaces/guest/actions/detect?blocking=true&result=true"
-	template := "http://%s/api/v1/namespaces/guest/actions/fibtest?blocking=true&result=true"
+	template := "http://%s/api/v1/namespaces/guest/actions/fibtest2?blocking=true&result=true"
 
 	url := fmt.Sprintf(template, IP)
 	// var jsonB = []byte("{\"input\":\"hello\"}")

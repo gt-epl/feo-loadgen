@@ -9,8 +9,9 @@ import time
 ### START CONFIGURATION AREA ###
 # On each run, adjust the configurations below:
 
-policy="federated" # Available candidates are in 'feo/offload.go'
-RESDIR=f'../feodata/cluster_exp_fibtest_p9/run_load/{policy}'
+policy=sys.argv[3] # Available candidates are in 'feo/offload.go'
+# RESDIR=f'../feodata/' + sys.argv[2] +'/run_load/{policy}'
+RESDIR=f'../feodata/' + sys.argv[2] +'/run_load/' + policy
 
 # TODO: hosts configuration could be automatically generated. 
 SSH_CONFIG_PATH = "/home/jithin/.ssh/config"
@@ -18,6 +19,8 @@ OPENWHISK_IP = "http://localhost:3233" # Ip of the openwhisk server running in e
 
 # TODO: since we have many apps, app configuration could be separate file. Loadgen could read the configs from the said files
 app_name = 'fibtest' # The directory name of the application under 'feo/apps'
+
+app_name_2 = 'fibtest2' # Only used if RUN_MULTI_LOADGEN is True.
 
 # TODO: force experiment trigger from local w/e that may be i.e., do away with this op.
 CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True if executing 'feo/utils/sync.ch' from the same node as run_load.py. Set to False if executing from the host defined in 'controller'.
@@ -30,6 +33,7 @@ CONFIG_EXEC_LOCAL = True # Refer to 'feo/README.md' for more detail. Set to True
 # i.e., this script should work off a hosts.csv file
 # it should possibly create the ssh config file.
 
+# hosts = ['clabcl0','clabcl1','clabcl2', 'clabcl3', 'clabcl4', 'clabcl5', 'clabcl6', 'clabcl7', 'clabcl8', 'clabcl9']
 hosts = ['clabcl0','clabcl1','clabcl2', 'clabcl3', 'clabcl4', 'clabcl5', 'clabcl6', 'clabcl7', 'clabcl8', 'clabcl9']
 controller = 'clabsvr' # The server which will run the controller for 'central' policy.
 ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,20)]
@@ -42,16 +46,18 @@ ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,20)]
 COPY_LOAD_BIN   = True # Builds and copies the Loadgen binary.
 KILL_LOAD       = True  
 KILL_FEO        = True
-LOAD_PROFILE    = False # Will copy profile, i.e. var_lam_loads
+LOAD_PROFILE    = True # Will copy profile, i.e. var_lam_loads
 CONFIG          = True # run sync.sh
 RUN_OPENWHISK   = False # Runs the standalone openwhisk image on each host in 'hosts'.
+DEPLOY_FIBTEST  = False
 CREATE_ACTION   = False  # Runs the `create_action.sh` script for the application defined in `app_name`
 SET_LATENCY     = False # Runs the `set_latency.sh` script to set the inter-node latency.
 RUN_FEO         = True  # Runs the feo binary on each host in 'hosts'. Also runs central_server in 'central' policy.
-WARMUP          = True  # Generates dummy requests to avoid coldstart latency
+WARMUP          = False  # Generates dummy requests to avoid coldstart latency
 ACTUAL          = True # Generate load using the loadgen binary
 FETCH_RESULTS   = True # Fetch results from 'hosts' into RESDIR
 
+RUN_MULTI_LOADGEN = True # Currently runs each loadgen instance twice simultaneously on each node.
 
 ### END CONFIGURATION AREA ###
 
@@ -74,9 +80,14 @@ if COPY_LOAD_BIN:
     print('[+] Build and copy loadgen binary')
     for c in conns:
         try:
-            os.system(f'GOOS=linux GOARCH=amd64 go build')
+            os.system(f'GOOS=linux GOARCH=amd64 go build loadgen.go')
             c.put('loadgen','/tmp/')
             c.put('coldstart.jpeg', '/tmp/')
+
+            if RUN_MULTI_LOADGEN:
+                os.system(f'GOOS=linux GOARCH=amd64 go build loadgen2.go')
+                c.put('loadgen2','/tmp/')
+
         except Exception as e:
             print(e)
             pass
@@ -86,6 +97,7 @@ if KILL_LOAD:
     for c in conns:
         try:
             c.run('killall loadgen')
+            c.run('killall loadgen2')
         except Exception as e:
             print(e)
             pass
@@ -126,6 +138,30 @@ if RUN_OPENWHISK:
             print(e)
             pass
 
+if DEPLOY_FIBTEST: 
+    print('[+] Run standalone fibtest containers')
+    for c in conns:
+        try:
+            c.run(f'docker kill $(docker ps -q)')
+        except Exception as e:
+            print(e)
+            pass
+    
+    for c in conns:
+        try:
+            c.run(f'docker pull jithinsojan/fibtest-local')
+        except Exception as e:
+            print(e)
+            pass
+
+    for c in conns:
+        try:
+            for i in range(9000,9020):
+                c.run(f'docker run -p {i}:9000 -d jithinsojan/fibtest-local')
+        except Exception as e:
+            print(e)
+            pass
+
 if CREATE_ACTION:
     print(f'[+] Create the action for the app {app_name}')
     for c in conns:
@@ -134,6 +170,14 @@ if CREATE_ACTION:
         except Exception as e:
             print(e)
             pass
+    
+    if RUN_MULTI_LOADGEN:
+        for c in conns:
+            try:
+                c.run(f'bash ~/apps/{app_name_2}/create_action.sh {OPENWHISK_IP}')
+            except Exception as e:
+                print(e)
+                pass
 
 if SET_LATENCY:
     print(f'[+] Set the inter-node latency')
@@ -143,7 +187,6 @@ if SET_LATENCY:
             c.run(f'bash ~/utils/unset_latency.sh {intf} > /dev/null')
         except Exception as e:
             print(e)
-            pass
 
         try:
             c.run(f'bash ~/utils/set_latency.sh {intf} 5 > /dev/null')
@@ -165,7 +208,7 @@ if RUN_FEO:
         print(f'Running feo @ {hosts[i]}')
         with c.cd('/tmp/'):
             try:
-                c.run("bash -c 'nohup ./feo > feo.log 2>&1 &'", pty=False)
+                c.run("bash -c 'nohup ./feo -port1 9000 -count1 10 -port2 9010 -count2 10 > feo.log 2>&1 &'", pty=False)
             except Exception as e:
                 print(e)
                 exit()
@@ -181,7 +224,7 @@ if LOAD_PROFILE:
         c.put(profile, f"/tmp")
 
 
-def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str):
+def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str, app :str):
     duration = 60
 
     profile = profile_fp.split('/')[-1]
@@ -191,9 +234,16 @@ def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str):
     print(f"Running {profile} for {host}: {uidstr}")
     with conn.cd('/tmp/'):
         if not uid:
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip}> /dev/null")
+            if app == app_name:
+                conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} > /dev/null")
+            else:
+                conn.run(f"./loadgen2 -duration {duration} -trace {profile} -host {ip} > /dev/null")
         else:
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} > {uid}")
+            outstr = app + "-" + uid
+            if app == app_name:
+                conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} > {outstr}")
+            else:
+                conn.run(f"./loadgen2 -duration {duration} -trace {profile} -host {ip} > {outstr}")
 
 def run_tasks(uid=None):
     tasks = [ 
@@ -202,8 +252,21 @@ def run_tasks(uid=None):
                                   ips[i],
                                   conns[i],
                                   profiles.loc[host].iloc[0],
-                                  uid))
+                                  uid,
+                                  app_name))
             for i,host in enumerate(hosts)]
+    
+    if RUN_MULTI_LOADGEN:
+        tasks2 = [ 
+                threading.Thread( target=run_load,
+                                args=(host, 
+                                    ips[i],
+                                    conns[i],
+                                    profiles.loc[host].iloc[0],
+                                    uid,
+                                    app_name_2))
+                for i,host in enumerate(hosts)]
+        tasks = tasks + tasks2
 
     for t in tasks:
         t.start()
@@ -224,5 +287,9 @@ if FETCH_RESULTS:
         print(f"[+] {host}: Transfering result file:")
         dst = f'{RESDIR}/{host}'
         os.system(f'mkdir -p {dst}')
-        os.system(f'rsync -avz {host}:/tmp/{UID} {dst}/')
+        outstr = app_name + "-" + UID
+        os.system(f'rsync -avz {host}:/tmp/{outstr} {dst}/')
+        if RUN_MULTI_LOADGEN:
+            outstr2 = app_name_2 + "-" + UID
+            os.system(f'rsync -avz {host}:/tmp/{outstr2} {dst}/')
         
