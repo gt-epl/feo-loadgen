@@ -52,7 +52,7 @@ ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,20)]
 COPY_LOAD_BIN   = True # Builds and copies the Loadgen binary.
 KILL_LOAD       = True  
 KILL_FEO        = True
-LOAD_PROFILE    = False # Will copy profile, i.e. var_lam_loads
+LOAD_PROFILE    = True # Will copy profile, i.e. var_lam_loads
 CONFIG          = True # run sync.sh
 DEPLOY_FIBTEST  = False
 SET_LATENCY     = False # Runs the `set_latency.sh` script to set the inter-node latency.
@@ -158,6 +158,7 @@ if DEPLOY_FIBTEST:
     for c in conns:
         try:
             for i in range(9000,9020):
+                # --cpuset-cpus="8-19"
                 c.run(f'docker run -p {i}:9000 -d jithinsojan/fibtest-local')
         except Exception as e:
             print(e)
@@ -204,6 +205,7 @@ if RUN_FEO:
         print(f'Running feo @ {hosts[i]}')
         with c.cd('/tmp/'):
             try:
+                # taskset --cpu-list 0-3
                 c.run("bash -c 'nohup ./feo > feo.log 2>&1 &'", pty=False)
             except Exception as e:
                 print(e)
@@ -225,40 +227,54 @@ if LOAD_PROFILE:
     print("[+] Transfer load files")
     for i,c in enumerate(conns):
         host = hosts[i]
-        profile = profiles.loc[host].iloc[0]
+        profile_strs = profiles.loc[host].iloc[0].split('-')
+        for profile_str in profile_strs:
+            profile = profile_str.strip()
+            print(f"[+] {host}: Transfering load file: {profile}")
+            c.put(profile, f"/tmp")
 
 
-        print(f"[+] {host}: Transfering load file: {profile}")
-        c.put(profile, f"/tmp")
-
-
-def run_background(conn : Connection, command : str):
-    conn.run(f"bash -c 'nohup {command} 2>&1 &'", pty=False)
+def run_background(conn : Connection, command : str, errFile: str):
+    conn.run(f"bash -c 'nohup {command} 2>{errFile} &'", pty=False)
 
 
 def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str):
     duration = 60
 
-    profile = profile_fp.split('/')[-1]
+    profile_strs = profile_fp.split('-')
+    profiles = []
+    for profile_str in profile_strs:
+        profiles.append(profile_str.strip().split('/')[-1])
+    
+    if (len(profiles) == 0):
+        print("Error: no trace files found in profile")
+        exit()
+
+    # profile = profile_fp.split('/')[-1]
     uidstr = uid
     if not uidstr:
         uidstr="warmup"
-    print(f"Running {profile} for {host}: {uidstr}")
-    with conn.cd('/tmp/'):    
+    # print(f"Running {profile} for {host}: {uidstr}")
+    with conn.cd('/tmp/'):
+        i = 1
         for app in apps[1:]:
-            print(f'Running loadgen for app {app.name} in host {host}')
+            if (len(profiles) <= i):
+                break
+
+            print(f'Running loadgen trace {profiles[i]} for app {app.name} in host {host}')
             if not uid:
-                run_background(conn, f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app.name} > /dev/null")
+                run_background(conn, f"./loadgen -duration {duration} -trace {profiles[i]} -host {ip} -app {app.name} > /dev/null", "/dev/null")
             else:
                 outstr = app.name + "-" + uid
-                run_background(conn, f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app.name} > {outstr}")
+                run_background(conn, f"./loadgen -duration {duration} -trace {profiles[i]} -host {ip} -app {app.name} > {outstr}", outstr.split('.')[0]+'.err')
+            i += 1
         
-        print(f'Running loadgen for app {apps[0].name} in host {host}')
+        print(f'Running loadgen trace {profiles[0]} for app {apps[0].name} in host {host}')
         if not uid:
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[0].name} > /dev/null")
+            conn.run(f"./loadgen -duration {duration} -trace {profiles[0]} -host {ip} -app {apps[0].name} > /dev/null")
         else:
             outstr = apps[0].name + "-" + uid
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[0].name} > {outstr}")
+            conn.run(f"./loadgen -duration {duration} -trace {profiles[0]} -host {ip} -app {apps[0].name} > {outstr}")
 
 def run_tasks(uid=None):
     task = [
@@ -290,6 +306,10 @@ if FETCH_RESULTS:
         dst = f'{RESDIR}/{host}'
         os.system(f'mkdir -p {dst}')
 
-        for app in apps:
+        profile_strs = profiles.loc[host].iloc[0].split('-')
+        num_profiles = len(profile_strs)
+
+        for i in range(num_profiles):
+            app = apps[i]
             outstr = app.name + "-" + UID
             os.system(f'rsync -avz {host}:/tmp/{outstr} {dst}/')
