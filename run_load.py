@@ -52,7 +52,7 @@ ips = [f'192.168.10.{last_octet}:9696' for last_octet in range(10,20)]
 COPY_LOAD_BIN   = True # Builds and copies the Loadgen binary.
 KILL_LOAD       = True  
 KILL_FEO        = True
-LOAD_PROFILE    = True # Will copy profile, i.e. var_lam_loads
+LOAD_PROFILE    = False # Will copy profile, i.e. var_lam_loads
 CONFIG          = True # run sync.sh
 DEPLOY_FIBTEST  = False
 SET_LATENCY     = False # Runs the `set_latency.sh` script to set the inter-node latency.
@@ -82,19 +82,6 @@ profiles = profiles.set_index('host')
 conns = [Connection(host, config=cfg) for host in hosts]
 controller_conn =  Connection(controller, config=cfg)
 
-
-if COPY_LOAD_BIN:
-    print('[+] Build and copy loadgen binary')
-    for c in conns:
-        try:
-            os.system(f'GOOS=linux GOARCH=amd64 go build')
-            c.put('loadgen','/tmp/')
-            c.put('coldstart.jpeg', '/tmp/')
-
-        except Exception as e:
-            print(e)
-            pass
-
 if KILL_LOAD:
     print('[+] killall loadgen')
     for c in conns:
@@ -118,6 +105,18 @@ if KILL_FEO:
             controller_conn.run('killall central_server')
         except Exception as e:
             print(e)
+
+if COPY_LOAD_BIN:
+    print('[+] Build and copy loadgen binary')
+    for c in conns:
+        try:
+            os.system(f'GOOS=linux GOARCH=amd64 go build')
+            c.put('loadgen','/tmp/')
+            c.put('coldstart.jpeg', '/tmp/')
+
+        except Exception as e:
+            print(e, c)
+            pass
 
 if CONFIG:
     print(f'[+] Sync Config: {policy}')
@@ -246,7 +245,7 @@ def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str):
         uidstr="warmup"
     print(f"Running {profile} for {host}: {uidstr}")
     with conn.cd('/tmp/'):    
-        for app in apps[:-1]:
+        for app in apps[1:]:
             print(f'Running loadgen for app {app.name} in host {host}')
             if not uid:
                 run_background(conn, f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app.name} > /dev/null")
@@ -254,12 +253,12 @@ def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str):
                 outstr = app.name + "-" + uid
                 run_background(conn, f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {app.name} > {outstr}")
         
-        print(f'Running loadgen for app {apps[-1].name} in host {host}')
+        print(f'Running loadgen for app {apps[0].name} in host {host}')
         if not uid:
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[-1].name} > /dev/null")
+            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[0].name} > /dev/null")
         else:
-            outstr = apps[-1].name + "-" + uid
-            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[-1].name} > {outstr}")
+            outstr = apps[0].name + "-" + uid
+            conn.run(f"./loadgen -duration {duration} -trace {profile} -host {ip} -app {apps[0].name} > {outstr}")
 
 def run_tasks(uid=None):
     task = [
