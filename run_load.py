@@ -158,8 +158,7 @@ if DEPLOY_FIBTEST:
     for c in conns:
         try:
             for i in range(9000,9020):
-                # --cpuset-cpus="8-19"
-                c.run(f'docker run -p {i}:9000 -d jithinsojan/fibtest-local')
+                c.run(f'docker run -p {i}:9000 --cpuset-cpus="8-13" -d jithinsojan/fibtest-local')
         except Exception as e:
             print(e)
             pass
@@ -205,8 +204,7 @@ if RUN_FEO:
         print(f'Running feo @ {hosts[i]}')
         with c.cd('/tmp/'):
             try:
-                # taskset --cpu-list 0-3
-                c.run("bash -c 'nohup ./feo > feo.log 2>&1 &'", pty=False)
+                c.run("taskset --cpu-list 0-3 bash -c 'nohup ./feo > feo.log 2>&1 &'", pty=False)
             except Exception as e:
                 print(e)
                 exit()
@@ -230,6 +228,8 @@ if LOAD_PROFILE:
         profile_strs = profiles.loc[host].iloc[0].split('-')
         for profile_str in profile_strs:
             profile = profile_str.strip()
+            if (profile == "MT"):
+                continue
             print(f"[+] {host}: Transfering load file: {profile}")
             c.put(profile, f"/tmp")
 
@@ -261,20 +261,22 @@ def run_load(host :str, ip :str, conn : Connection, profile_fp :str, uid : str):
             if (len(profiles) <= i):
                 break
 
-            print(f'Running loadgen trace {profiles[i]} for app {app.name} in host {host}')
-            if not uid:
-                run_background(conn, f"./loadgen -duration {duration} -trace {profiles[i]} -host {ip} -app {app.name} > /dev/null", "/dev/null")
-            else:
-                outstr = app.name + "-" + uid
-                run_background(conn, f"./loadgen -duration {duration} -trace {profiles[i]} -host {ip} -app {app.name} > {outstr}", outstr.split('.')[0]+'.err')
+            if (profiles[i] != "MT"):
+                print(f'Running loadgen trace {profiles[i]} for app {app.name} in host {host}')
+                if not uid:
+                    run_background(conn, f"taskset --cpu-list 4-7 ./loadgen -duration {duration} -trace {profiles[i]} -host {ip} -app {app.name} -qps 50 > /dev/null", "/dev/null")
+                else:
+                    outstr = app.name + "-" + uid
+                    run_background(conn, f"taskset --cpu-list 4-7 ./loadgen -duration {duration} -trace {profiles[i]} -host {ip} -app {app.name} -qps 50 > {outstr}", outstr.split('.')[0]+'.err')
             i += 1
         
-        print(f'Running loadgen trace {profiles[0]} for app {apps[0].name} in host {host}')
-        if not uid:
-            conn.run(f"./loadgen -duration {duration} -trace {profiles[0]} -host {ip} -app {apps[0].name} > /dev/null")
-        else:
-            outstr = apps[0].name + "-" + uid
-            conn.run(f"./loadgen -duration {duration} -trace {profiles[0]} -host {ip} -app {apps[0].name} > {outstr}")
+        if profiles[0] != "MT":
+            print(f'Running loadgen trace {profiles[0]} for app {apps[0].name} in host {host}')
+            if not uid:
+                conn.run(f"taskset --cpu-list 4-7 ./loadgen -duration {duration} -trace {profiles[0]} -host {ip} -app {apps[0].name} > /dev/null")
+            else:
+                outstr = apps[0].name + "-" + uid
+                conn.run(f"taskset --cpu-list 4-7 ./loadgen -duration {duration} -trace {profiles[0]} -host {ip} -app {apps[0].name} > {outstr}")
 
 def run_tasks(uid=None):
     task = [
@@ -307,9 +309,10 @@ if FETCH_RESULTS:
         os.system(f'mkdir -p {dst}')
 
         profile_strs = profiles.loc[host].iloc[0].split('-')
-        num_profiles = len(profile_strs)
-
-        for i in range(num_profiles):
-            app = apps[i]
-            outstr = app.name + "-" + UID
-            os.system(f'rsync -avz {host}:/tmp/{outstr} {dst}/')
+        i = 0
+        for profile_str in profile_strs:
+            if profile_str.strip() != "MT":
+                app = apps[i]
+                outstr = app.name + "-" + UID
+                os.system(f'rsync -avz {host}:/tmp/{outstr} {dst}/')
+            i+=1
