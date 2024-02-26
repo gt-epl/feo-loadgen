@@ -85,12 +85,14 @@ func main() {
 	ipstr := flag.String("host", "192.168.10.10:9696", "offload daemon host IP")
 	appstr := flag.String("app","fibtest", "application to send requests to")
 	qpsptr := flag.Int("qps", 0, "qps (queries per second)")
+	minuteptr := flag.Int("minute", 0, "minute to start the experiment in the trace")
 
 	flag.Parse()
 	limit := *lflag
 	qps := *qpsptr
 	IP = *ipstr
 	APP = *appstr
+	minute := float64(*minuteptr)
 
 	template := "http://%s/api/v1/namespaces/guest/actions/%s?blocking=true&result=true"
 
@@ -113,9 +115,14 @@ func main() {
 
 	go HandleResponse(nb, wg)
 
-	start := time.Now()
+	var start time.Time
+	secPtr := 0.0
+	checkPtr := true
+
 	var sleep_ms int
 	if qps != 0 {
+		start = time.Now()
+		checkPtr = false
 		sleep_ms = 1000 / qps
 	}
 	for i, d := range data {
@@ -123,6 +130,20 @@ func main() {
 		// if i >= limit {
 		// 	break
 		// }
+
+		// log.Print(d)
+		// log.Print(minute)
+
+		if checkPtr {
+			secPtr += d
+			if (secPtr < minute * 60) {
+				continue
+			} else {
+				log.Printf("Starting the traffic generation at second %f",secPtr)
+				start = time.Now()
+				checkPtr = false
+			}
+		}
 
 		if time.Since(start).Seconds() >= float64(*duration) {
 			break
@@ -205,7 +226,13 @@ func HandleResponse(nb chan nonBlocking, wg *sync.WaitGroup) {
 			// }
 			// fmt.Println(get.e2e, string(objmap["invoke_time"]))
 
-			fmt.Println(get.e2e, ",", get.Response.Header.Get("Invoc-Loc"), ",", get.Response.Header.Get("Invoc-Time"))
+			_, ok := get.Response.Header["Get-Candidate"]
+			if ok {
+				fmt.Println(get.e2e, ",", get.Response.Header.Get("Invoc-Loc"), ",", get.Response.Header.Get("Invoc-Time"), ",", get.Response.Header.Get("Get-Candidate"))
+			} else {
+				fmt.Println(get.e2e, ",", get.Response.Header.Get("Invoc-Loc"), ",", get.Response.Header.Get("Invoc-Time"), ",", "-1ms")
+			}
+			// fmt.Println(get.e2e, ",", get.Response.Header.Get("Invoc-Loc"), ",", get.Response.Header.Get("Invoc-Time"))
 		}
 		wg.Done()
 	}
